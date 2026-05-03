@@ -74,8 +74,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         throw new Error(body.error ?? `HTTP ${response.status}`);
       }
 
-      const projects = (await response.json()) as Project[];
-      set({ projects, isLoading: false });
+      const body = (await response.json()) as { projects: Project[] };
+      set({ projects: body.projects, isLoading: false });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Gagal memuat daftar project.";
@@ -100,7 +100,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         throw new Error(body.error ?? `HTTP ${response.status}`);
       }
 
-      const newProject = (await response.json()) as Project;
+      const body = (await response.json()) as { project: Project };
+      const newProject = body.project;
 
       // Prepend the new project so it appears first (most recently updated).
       set((state) => ({
