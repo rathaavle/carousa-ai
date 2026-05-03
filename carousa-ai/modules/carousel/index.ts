@@ -17,6 +17,7 @@ import {
   getSlidesByProject,
   upsertSlides,
   getBrandProfile,
+  updateSlide,
 } from "@/lib/db/queries";
 import { AI_Orchestrator } from "@/modules/ai/orchestrator";
 import { uploadSlideImage } from "@/modules/image";
@@ -31,6 +32,14 @@ export interface GenerationResult {
   failed: number;
   total: number;
   slides: Slide[];
+}
+
+/** Result of a single-slide regeneration. */
+export interface RegenerateSlideResult {
+  /** The updated slide after regeneration. */
+  slide: Slide;
+  /** The generation record ID for audit purposes. */
+  generationId: string;
 }
 
 // ── CarouselModule ────────────────────────────────────────────────────────
@@ -237,6 +246,188 @@ export class CarouselModule {
     }
 
     return { completed, failed, total: slides.length, slides: updatedSlides };
+  }
+
+  // ── Single-slide regeneration ───────────────────────────────────────────
+
+  /**
+   * Regenerate the text or image for a single slide without affecting
+   * any other slides in the project.
+   *
+   * For `type = "image"`:
+   *  1. Fetch the latest brand profile for the user.
+   *  2. Rebuild the prompt via `AI_Orchestrator.generatePrompt()`.
+   *  3. Generate a new image via `AI_Orchestrator.generateImage()`.
+   *  4. Upload the image to Supabase Storage (replaces the old file).
+   *  5. Update `slide.prompt` and `slide.image_url` in the database.
+   *
+   * For `type = "text"`:
+   *  1. Call `AI_Orchestrator.regenerateSlideText()` with the project
+   *     theme and the slide's position in the storyline.
+   *  2. Update `slide.text`, `slide.emotion`, and `slide.scene` in the DB.
+   *
+   * On failure: the original slide content is preserved, the error is
+   * recorded in a Generation_Record, and an `AIGenerationError` is thrown
+   * so the caller can surface a meaningful message to the user.
+   *
+   * @param slideId  UUID of the slide to regenerate.
+   * @param type     `"text"` or `"image"`.
+   * @param userId   UUID of the authenticated user (ownership check).
+   * @returns        The updated slide and the generation record ID.
+   *
+   * Requirements: 8.1, 8.2, 8.3, 8.4, 8.5
+   */
+  async regenerateSlide(
+    slideId: string,
+    type: "text" | "image",
+    userId: string,
+  ): Promise<RegenerateSlideResult> {
+    const supabase = await createClient();
+
+    // 1. Fetch the slide and verify ownership via its parent project
+    const { data: slideData, error: slideFetchError } = await supabase
+      .from("slides")
+      .select("*")
+      .eq("id", slideId)
+      .single();
+
+    if (slideFetchError || !slideData) {
+      throw new AuthorizationError("Slide tidak ditemukan.");
+    }
+
+    const slide = slideData as Slide;
+
+    // Verify the parent project belongs to this user
+    const project = await getProjectById(supabase, slide.project_id, userId);
+    if (!project) {
+      throw new AuthorizationError(
+        "Project tidak ditemukan atau Anda tidak memiliki akses.",
+      );
+    }
+
+    // Resolve theme — fall back to sensible defaults if not joined
+    const theme: Theme = project.theme ?? {
+      id: project.theme_id ?? "",
+      name: "Default",
+      mood: "aesthetic",
+      color_base: "neutral tones",
+      lighting: "soft natural light",
+    };
+
+    const orchestrator = new AI_Orchestrator(supabase);
+
+    if (type === "image") {
+      return this._regenerateImage(
+        supabase,
+        orchestrator,
+        slide,
+        theme,
+        project.id,
+        userId,
+      );
+    } else {
+      return this._regenerateText(
+        supabase,
+        orchestrator,
+        slide,
+        theme,
+        project.id,
+        project.total_slides,
+      );
+    }
+  }
+
+  /**
+   * Internal helper: regenerate the image for a single slide.
+   * On failure, preserves the original `image_url` and re-throws.
+   *
+   * Requirements: 8.1, 8.2, 8.3, 8.5
+   */
+  private async _regenerateImage(
+    supabase: ReturnType<typeof createClient> extends Promise<infer T>
+      ? T
+      : never,
+    orchestrator: AI_Orchestrator,
+    slide: Slide,
+    theme: Theme,
+    projectId: string,
+    userId: string,
+  ): Promise<RegenerateSlideResult> {
+    // 2. Fetch the latest brand profile (Requirements 8.1)
+    const brandProfile = await getBrandProfile(supabase, userId);
+
+    // Attach theme so generatePrompt() can access it
+    const slideWithTheme = { ...slide, theme } as Slide & { theme: Theme };
+
+    // 3. Build a fresh prompt with the latest brand profile (Requirements 8.2)
+    const prompt = await orchestrator.generatePrompt(
+      slideWithTheme,
+      brandProfile,
+    );
+
+    // 4. Generate the new image — creates + updates Generation_Record automatically
+    let imageResult: Awaited<ReturnType<typeof orchestrator.generateImage>>;
+    try {
+      imageResult = await orchestrator.generateImage(
+        prompt,
+        projectId,
+        slide.id,
+      );
+    } catch (err) {
+      // Preserve existing content on failure (Requirements 8.5)
+      throw err;
+    }
+
+    // 5. Upload to Supabase Storage (replaces the old file via upsert: true)
+    const { publicUrl: imageUrl } = await uploadSlideImage(supabase, {
+      userId,
+      projectId,
+      slideId: slide.id,
+      imageBuffer: imageResult.imageBuffer,
+      mimeType: imageResult.mimeType,
+    });
+
+    // 6. Persist the new prompt + image_url (Requirements 8.3)
+    const updatedSlide = await updateSlide(supabase, slide.id, {
+      prompt,
+      image_url: imageUrl,
+    });
+
+    return { slide: updatedSlide, generationId: imageResult.generationId };
+  }
+
+  /**
+   * Internal helper: regenerate the text/emotion/scene for a single slide.
+   * On failure, preserves the original text and re-throws.
+   *
+   * Requirements: 8.4, 8.5
+   */
+  private async _regenerateText(
+    supabase: ReturnType<typeof createClient> extends Promise<infer T>
+      ? T
+      : never,
+    orchestrator: AI_Orchestrator,
+    slide: Slide,
+    theme: Theme,
+    projectId: string,
+    totalSlides: number,
+  ): Promise<RegenerateSlideResult> {
+    // Call the orchestrator to regenerate text with theme + position context
+    const result = await orchestrator.regenerateSlideText(
+      projectId,
+      slide,
+      theme,
+      totalSlides,
+    );
+
+    // Persist the new text, emotion, and scene (Requirements 8.4)
+    const updatedSlide = await updateSlide(supabase, slide.id, {
+      text: result.text,
+      emotion: result.emotion,
+      scene: result.scene,
+    });
+
+    return { slide: updatedSlide, generationId: result.generationId };
   }
 
   // ── Caption generation ──────────────────────────────────────────────────

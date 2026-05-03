@@ -232,6 +232,67 @@ export class AI_Orchestrator {
     }
   }
 
+  // ── Single-slide text regeneration ─────────────────────────────────────
+
+  /**
+   * Regenerate the text, emotion, and scene for a single slide using Gemini,
+   * with the project theme and the slide's position in the storyline as context.
+   *
+   * @param projectId   Used to create the Generation_Record.
+   * @param slide       The slide to regenerate text for.
+   * @param theme       The project's theme for context.
+   * @param totalSlides Total number of slides in the project (for position context).
+   * @returns           New text, emotion, scene, and the generation record ID.
+   *
+   * Requirements: 8.4
+   */
+  async regenerateSlideText(
+    projectId: string,
+    slide: Slide,
+    theme: Theme,
+    totalSlides: number,
+  ): Promise<{
+    text: string;
+    emotion: string;
+    scene: string;
+    generationId: string;
+  }> {
+    const genRecord = await this.createRecord({
+      projectId,
+      slideId: slide.id,
+      type: "story",
+      provider: "gemini",
+    });
+
+    try {
+      const prompt = this.buildSlideTextRegenerationPrompt(
+        slide,
+        theme,
+        totalSlides,
+      );
+      const result = await this.gemini.generateText(prompt, {
+        temperature: 0.7,
+      });
+
+      // Parse the JSON response from Gemini
+      const parsed = this.parseRegeneratedSlideText(result.content, slide);
+
+      await this.succeedRecord(genRecord.id, {
+        slideId: slide.id,
+        slideIndex: slide.index,
+        tokensUsed: result.tokensUsed,
+      });
+
+      return { ...parsed, generationId: genRecord.id };
+    } catch (error) {
+      await this.failRecord(genRecord.id, error);
+      throw new AIGenerationError(
+        `Slide text regeneration failed: ${errorMessage(error)}`,
+        genRecord.id,
+      );
+    }
+  }
+
   // ── Caption generation ──────────────────────────────────────────────────
 
   /**
@@ -339,6 +400,73 @@ export class AI_Orchestrator {
       `Return ONLY valid JSON, no markdown code blocks, no commentary.\n` +
       `Example: [{"text":"...","emotion":"...","scene":"..."}]`
     );
+  }
+
+  private buildSlideTextRegenerationPrompt(
+    slide: Slide,
+    theme: Theme,
+    totalSlides: number,
+  ): string {
+    const position = slide.index + 1; // 1-based for human-readable context
+    const isFirst = slide.index === 0;
+    const isLast = slide.index === totalSlides - 1;
+
+    const positionHint = isFirst
+      ? "This is the OPENING slide — it should hook the reader."
+      : isLast
+        ? "This is the CLOSING slide — it should deliver the final message or CTA."
+        : `This is slide ${position} of ${totalSlides} — it should continue the narrative flow.`;
+
+    return (
+      `You are a creative Instagram content writer. Regenerate the content for a single carousel slide.\n\n` +
+      `PROJECT THEME:\n` +
+      `- Theme: ${theme.name}\n` +
+      `- Mood: ${theme.mood}\n` +
+      `- Color palette: ${theme.color_base}\n` +
+      `- Lighting: ${theme.lighting}\n\n` +
+      `SLIDE CONTEXT:\n` +
+      `- Position: ${positionHint}\n` +
+      (slide.text ? `- Current text: "${slide.text}"\n` : "") +
+      (slide.emotion ? `- Current emotion: ${slide.emotion}\n` : "") +
+      (slide.scene ? `- Current scene: ${slide.scene}\n` : "") +
+      `\nGenerate a fresh version of this slide. Return ONLY valid JSON with this exact shape:\n` +
+      `{"text":"...","emotion":"...","scene":"..."}\n\n` +
+      `- "text": concise slide caption (1–3 sentences, evocative and on-brand)\n` +
+      `- "emotion": dominant emotion (e.g. "hopeful", "melancholic", "excited")\n` +
+      `- "scene": brief visual scene description for image generation (e.g. "golden hour forest path")\n\n` +
+      `Return ONLY valid JSON, no markdown, no commentary.`
+    );
+  }
+
+  private parseRegeneratedSlideText(
+    content: string,
+    slide: Slide,
+  ): { text: string; emotion: string; scene: string } {
+    try {
+      const cleaned = content
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```\s*$/, "")
+        .trim();
+
+      const parsed = JSON.parse(cleaned) as {
+        text?: string;
+        emotion?: string;
+        scene?: string;
+      };
+
+      return {
+        text: parsed.text?.trim() || slide.text || `Slide ${slide.index + 1}`,
+        emotion: parsed.emotion?.trim() || slide.emotion || "neutral",
+        scene: parsed.scene?.trim() || slide.scene || "abstract background",
+      };
+    } catch {
+      // Fallback: return the raw content as text, preserve existing emotion/scene
+      return {
+        text: content.trim() || slide.text || `Slide ${slide.index + 1}`,
+        emotion: slide.emotion || "neutral",
+        scene: slide.scene || "abstract background",
+      };
+    }
   }
 
   private buildCaptionPrompt(slideTexts: string[]): string {
