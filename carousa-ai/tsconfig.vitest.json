@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "skipLibCheck": true
+  },
+  "include": ["vitest.config.ts", "tests/**/*.ts", "tests/**/*.tsx"]
+}
