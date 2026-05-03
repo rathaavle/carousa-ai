@@ -171,7 +171,7 @@ export default function ProjectForm({
             onClick={onClose}
             disabled={isPending}
             className="
-              flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground
+              flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground
               hover:bg-muted hover:text-foreground transition-colors
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
               disabled:pointer-events-none disabled:opacity-50

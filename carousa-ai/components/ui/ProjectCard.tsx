@@ -155,7 +155,7 @@ export default function ProjectCard({
             onClick={handleDeleteClick}
             disabled={isDeleting}
             className="
-              shrink-0 flex h-8 w-8 items-center justify-center rounded-lg
+              shrink-0 flex h-11 w-11 items-center justify-center rounded-lg
               text-muted-foreground transition-colors
               hover:bg-destructive/10 hover:text-destructive
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring

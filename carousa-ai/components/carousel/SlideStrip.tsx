@@ -146,7 +146,7 @@ export default function SlideStrip({ slides, activeSlideId }: SlideStripProps) {
               className={`
                 relative flex flex-col gap-1.5 rounded-lg border p-1.5 cursor-pointer
                 transition-all select-none
-                min-w-[80px] lg:min-w-0 w-20 lg:w-full
+                min-w-[80px] lg:min-w-0 w-20 lg:w-full min-h-[44px]
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
                 ${
                   isActive

@@ -38,7 +38,7 @@ export default async function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-background px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
         <DashboardClient initialProjects={initialProjects} themes={themes} />
       </div>
     </main>

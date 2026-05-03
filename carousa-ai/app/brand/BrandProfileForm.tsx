@@ -265,7 +265,7 @@ export default function BrandProfileForm({
         <div className="rounded-xl border border-border bg-muted/40 p-4">
           <div className="flex items-start gap-4">
             {/* Toggle */}
-            <div className="shrink-0 mt-0.5">
+            <div className="shrink-0 mt-0.5 flex items-center min-h-[44px] min-w-[44px] justify-center">
               <button
                 type="button"
                 role="switch"

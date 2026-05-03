@@ -58,13 +58,13 @@ export default function EditorClient({
     <div className="flex flex-col min-h-screen">
       {/* Top bar: project name + toolbar */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
-        <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
+        <div className="flex items-center gap-3 px-4 py-3 sm:px-6 max-w-7xl mx-auto">
           {/* Back to dashboard */}
           <a
             href="/dashboard"
             aria-label="Kembali ke Dashboard"
             className="
-              flex h-9 w-9 shrink-0 items-center justify-center rounded-lg
+              flex h-11 w-11 shrink-0 items-center justify-center rounded-lg
               text-muted-foreground transition-colors
               hover:bg-muted hover:text-foreground
               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
@@ -128,7 +128,7 @@ export default function EditorClient({
 
       {/* Two-panel layout */}
       {/* Responsive: stacked on tablet (flex-col), side-by-side on desktop (flex-row) */}
-      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden max-w-7xl w-full mx-auto">
         {/* Left panel: SlideStrip */}
         {/* On mobile/tablet: horizontal scrollable strip at top */}
         {/* On desktop: fixed-width vertical strip on the left */}
@@ -148,7 +148,7 @@ export default function EditorClient({
         {/* Right panel: SlideEditor */}
         <section
           aria-label="Editor slide"
-          className="flex-1 overflow-y-auto lg:h-[calc(100vh-57px)] p-4 sm:p-6"
+          className="flex-1 min-w-0 overflow-y-auto lg:h-[calc(100vh-57px)] p-4 sm:p-6"
         >
           {displayActiveId ? (
             <SlideEditor

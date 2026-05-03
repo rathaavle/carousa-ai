@@ -104,7 +104,7 @@ export default function DashboardClient({
       )}
 
       {/* Page header */}
-      <div className="flex items-center justify-between gap-4 mb-8">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -149,7 +149,7 @@ export default function DashboardClient({
       {isLoading && projects.length === 0 && (
         <div
           aria-label="Memuat daftar project…"
-          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3"
         >
           {Array.from({ length: 6 }).map((_, i) => (
             <div
@@ -209,9 +209,9 @@ export default function DashboardClient({
         </div>
       )}
 
-      {/* Project grid — responsive: 1 col on mobile, 2 on tablet, 3 on desktop */}
+      {/* Project grid — responsive: 1 col on mobile/tablet (≤1024px), 2 on desktop, 3 on wide desktop */}
       {projects.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {projects.map((project) => (
             <ProjectCard
               key={project.id}

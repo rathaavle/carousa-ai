@@ -395,7 +395,7 @@ export default function EditorToolbar({ projectId }: EditorToolbarProps) {
                 onClick={() => setIsCaptionPanelOpen(false)}
                 aria-label="Tutup panel caption"
                 className="
-                  flex h-8 w-8 items-center justify-center rounded-lg
+                  flex h-11 w-11 items-center justify-center rounded-lg
                   text-muted-foreground hover:bg-muted hover:text-foreground
                   transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
                 "

@@ -8,7 +8,7 @@ export const metadata = {
 export default function LoginPage() {
   return (
     <main className="min-h-screen flex items-center justify-center px-4 py-12 bg-background">
-      <div className="w-full">
+      <div className="w-full max-w-screen-sm">
         {/* Logo / Brand */}
         <div className="mb-8 text-center">
           <h2 className="text-3xl font-bold tracking-tight text-foreground">
