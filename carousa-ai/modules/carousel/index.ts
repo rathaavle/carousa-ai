@@ -19,8 +19,9 @@ import {
   getBrandProfile,
 } from "@/lib/db/queries";
 import { AI_Orchestrator } from "@/modules/ai/orchestrator";
+import { uploadSlideImage } from "@/modules/image";
 import { AuthorizationError, AIGenerationError } from "@/lib/utils/errors";
-import type { Slide, Project } from "@/lib/db/types";
+import type { Slide, Theme } from "@/lib/db/types";
 
 // ── Public types ──────────────────────────────────────────────────────────
 
@@ -128,9 +129,10 @@ export class CarouselModule {
    *
    * For each slide:
    *  1. Build a structured prompt via `AI_Orchestrator.generatePrompt()`.
-   *  2. Generate the image via `AI_Orchestrator.generateImage()`.
-   *  3. Upload the image buffer to Supabase Storage.
-   *  4. Update `slide.image_url` in the database.
+   *  2. Generate the image via `AI_Orchestrator.generateImage()` — this
+   *     creates a Generation_Record and logs success/failure automatically.
+   *  3. Upload the image buffer to Supabase Storage via `uploadSlideImage()`.
+   *  4. Update `slide.prompt` and `slide.image_url` in the database.
    *
    * Failures on individual slides are recorded but do not abort the batch
    * (fail-gracefully per Requirements 7.3).
@@ -162,7 +164,9 @@ export class CarouselModule {
     ]);
 
     const orchestrator = new AI_Orchestrator(supabase);
-    const theme = project.theme ?? {
+
+    // Resolve theme — fall back to sensible defaults if not joined
+    const theme: Theme = project.theme ?? {
       id: project.theme_id ?? "",
       name: "Default",
       mood: "aesthetic",
@@ -174,35 +178,38 @@ export class CarouselModule {
     let failed = 0;
     const updatedSlides: Slide[] = [];
 
+    // Process slides sequentially (Requirements 7.1)
     for (const slide of slides) {
       try {
-        // Attach theme to slide so generatePrompt() can access it
-        const slideWithTheme = { ...slide, theme };
+        // 1. Attach theme so generatePrompt() can access it
+        const slideWithTheme = { ...slide, theme } as Slide & {
+          theme: Theme;
+        };
 
-        // Build structured prompt
+        // 2. Build structured prompt (Requirements 6.1–6.5)
         const prompt = await orchestrator.generatePrompt(
-          slideWithTheme as Slide & { theme: typeof theme },
+          slideWithTheme,
           brandProfile,
         );
 
-        // Generate image buffer
+        // 3. Generate image — AI_Orchestrator creates + updates Generation_Record
+        //    automatically (Requirements 7.5, 13.1–13.4)
         const imageResult = await orchestrator.generateImage(
           prompt,
           projectId,
           slide.id,
         );
 
-        // Upload to Supabase Storage and get public URL
-        const imageUrl = await this.uploadSlideImage(
-          supabase,
+        // 4. Upload to Supabase Storage (Requirements 7.2)
+        const { publicUrl: imageUrl } = await uploadSlideImage(supabase, {
           userId,
           projectId,
-          slide.id,
-          imageResult.imageBuffer,
-          imageResult.mimeType,
-        );
+          slideId: slide.id,
+          imageBuffer: imageResult.imageBuffer,
+          mimeType: imageResult.mimeType,
+        });
 
-        // Persist prompt + image_url back to the slide
+        // 5. Persist prompt + image_url back to the slide
         const { data: updatedSlide, error: updateError } = await supabase
           .from("slides")
           .update({
@@ -218,8 +225,12 @@ export class CarouselModule {
 
         updatedSlides.push(updatedSlide as Slide);
         completed++;
-      } catch {
-        // Fail gracefully: record failure but continue with next slide
+      } catch (err) {
+        // Fail gracefully: log and continue with next slide (Requirements 7.3)
+        console.error(
+          `[carousel] Failed to generate image for slide ${slide.id}:`,
+          err instanceof Error ? err.message : err,
+        );
         failed++;
         updatedSlides.push(slide); // keep original slide data
       }
@@ -269,44 +280,7 @@ export class CarouselModule {
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
-
-  /**
-   * Upload a slide image buffer to Supabase Storage and return the public URL.
-   *
-   * Storage path: `{userId}/{projectId}/{slideId}.png`
-   *
-   * Requirements: 7.2
-   */
-  private async uploadSlideImage(
-    supabase: ReturnType<typeof createClient> extends Promise<infer T>
-      ? T
-      : never,
-    userId: string,
-    projectId: string,
-    slideId: string,
-    imageBuffer: Buffer,
-    mimeType: "image/jpeg" | "image/png",
-  ): Promise<string> {
-    const extension = mimeType === "image/jpeg" ? "jpg" : "png";
-    const path = `${userId}/${projectId}/${slideId}.${extension}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("slide-images")
-      .upload(path, imageBuffer, {
-        contentType: mimeType,
-        upsert: true,
-      });
-
-    if (uploadError) {
-      throw new Error(`Gagal mengunggah gambar: ${uploadError.message}`);
-    }
-
-    const { data: urlData } = supabase.storage
-      .from("slide-images")
-      .getPublicUrl(path);
-
-    return urlData.publicUrl;
-  }
+  // (Image upload is handled by modules/image/index.ts)
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────
