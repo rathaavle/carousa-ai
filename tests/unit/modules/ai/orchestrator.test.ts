@@ -34,13 +34,6 @@ const mockStabilityGenerateImage = vi.fn();
 vi.mock("@/lib/ai/gemini-provider", () => ({
   GeminiProvider: vi.fn().mockImplementation(() => ({
     generateText: (...args: unknown[]) => mockGeminiGenerateText(...args),
-    generateImage: vi.fn().mockRejectedValue(new Error("unsupported")),
-  })),
-}));
-
-vi.mock("@/lib/ai/stability-provider", () => ({
-  StabilityProvider: vi.fn().mockImplementation(() => ({
-    generateText: vi.fn().mockRejectedValue(new Error("unsupported")),
     generateImage: (...args: unknown[]) => mockStabilityGenerateImage(...args),
   })),
 }));
@@ -92,7 +85,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   idCounter = 0;
 
-  // Default: providers succeed
   mockGeminiGenerateText.mockResolvedValue({
     content: "mock story text",
     tokensUsed: 42,
@@ -220,7 +212,7 @@ describe("Property 8: Pencatatan Generation Record", () => {
 
   // ── generateImage — success ──────────────────────────────────────────────
 
-  it("generateImage berhasil: record type='image', provider='stability', update ke 'success'", async () => {
+  it("generateImage berhasil: record type='image', provider='gemini', update ke 'success'", async () => {
     await fc.assert(
       fc.asyncProperty(uuidArb, uuidArb, async (projectId, slideId) => {
         vi.clearAllMocks();
@@ -228,7 +220,7 @@ describe("Property 8: Pencatatan Generation Record", () => {
           makeGenRecord({
             project_id: projectId,
             type: "image",
-            provider: "stability",
+            provider: "gemini",
           }),
         );
         mockUpdateGenerationRecord.mockResolvedValue(undefined);
@@ -253,7 +245,7 @@ describe("Property 8: Pencatatan Generation Record", () => {
         ];
         expect(insertArg.project_id).toBe(projectId);
         expect(insertArg.type).toBe("image");
-        expect(insertArg.provider).toBe("stability");
+        expect(insertArg.provider).toBe("gemini");
         expect(insertArg.status).toBe("processing");
 
         const [, , updateArg] = mockUpdateGenerationRecord.mock.calls[0] as [
@@ -277,12 +269,12 @@ describe("Property 8: Pencatatan Generation Record", () => {
           makeGenRecord({
             project_id: projectId,
             type: "image",
-            provider: "stability",
+            provider: "gemini",
           }),
         );
         mockUpdateGenerationRecord.mockResolvedValue(undefined);
         mockStabilityGenerateImage.mockRejectedValue(
-          new Error("Stability API rate limit"),
+          new Error("Gemini image API rate limit"),
         );
 
         const orchestrator = new AI_Orchestrator(stubSupabase);
@@ -297,7 +289,7 @@ describe("Property 8: Pencatatan Generation Record", () => {
           Partial<Generation>,
         ];
         expect(updateArg.status).toBe("failed");
-        expect(updateArg.error_msg).toContain("Stability API rate limit");
+        expect(updateArg.error_msg).toContain("Gemini image API rate limit");
       }),
       { numRuns: 100 },
     );

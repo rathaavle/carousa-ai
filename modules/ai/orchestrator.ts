@@ -2,14 +2,13 @@
 // Carousa-AI: AI_Orchestrator
 // ============================================================
 // Central coordinator for all AI operations. Wraps GeminiProvider
-// (text) and StabilityProvider (image) behind a unified interface,
-// and ensures every operation is tracked via a Generation_Record.
+// behind a unified interface, and ensures every operation is tracked
+// via a Generation_Record.
 //
 // SERVER-SIDE ONLY — never import this module in client components.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { GeminiProvider } from "@/lib/ai/gemini-provider";
-import { StabilityProvider } from "@/lib/ai/stability-provider";
 import { PromptBuilder } from "@/lib/prompt/builder";
 import { AIGenerationError } from "@/lib/utils/errors";
 import {
@@ -27,6 +26,8 @@ export interface StoryContext {
   slideCount: number;
   /** Optional extra instructions / brand voice hints. */
   additionalContext?: string;
+  /** Language for the generated content (default: "Indonesian"). */
+  language?: string;
 }
 
 /** Raw story text returned by `generateStory()`. */
@@ -60,7 +61,7 @@ export interface ImageResult {
  *
  * Responsibilities:
  * - Route text requests to `GeminiProvider`.
- * - Route image requests to `StabilityProvider`.
+ * - Route image requests to `GeminiProvider` (native image generation).
  * - Create a `Generation_Record` before every operation.
  * - Update the record to `success` or `failed` after completion.
  * - Throw `AIGenerationError` (with the record ID) on failure so callers
@@ -68,14 +69,12 @@ export interface ImageResult {
  */
 export class AI_Orchestrator {
   private readonly gemini: GeminiProvider;
-  private readonly stability: StabilityProvider;
   private readonly promptBuilder: PromptBuilder;
   private readonly supabase: SupabaseClient;
 
   constructor(supabase: SupabaseClient) {
     this.supabase = supabase;
     this.gemini = new GeminiProvider();
-    this.stability = new StabilityProvider();
     this.promptBuilder = new PromptBuilder();
   }
 
@@ -205,15 +204,13 @@ export class AI_Orchestrator {
       projectId,
       slideId,
       type: "image",
-      provider: "stability",
+      provider: "gemini",
     });
 
     try {
-      const result = await this.stability.generateImage(prompt, {
+      const result = await this.gemini.generateImage(prompt, {
         width: 1024,
         height: 1024,
-        steps: 30,
-        cfgScale: 7,
       });
 
       await this.succeedRecord(genRecord.id, { slideId });
@@ -371,6 +368,7 @@ export class AI_Orchestrator {
   // ── Private: Prompt builders ─────────────────────────────────────────────
 
   private buildStoryPrompt(context: StoryContext): string {
+    const language = context.language ?? "Indonesian (Bahasa Indonesia)";
     return (
       `You are a creative content strategist for Instagram carousel posts.\n\n` +
       `Create an emotional storyline for an Instagram carousel with the following details:\n` +
@@ -385,6 +383,7 @@ export class AI_Orchestrator {
       `\nWrite a cohesive narrative that flows naturally across ${context.slideCount} slides. ` +
       `The story should evoke emotion, build curiosity, and end with a clear message or call to action. ` +
       `Write in a style suitable for a faceless aesthetic Instagram account.\n\n` +
+      `IMPORTANT: Write the entire storyline in ${language}.\n\n` +
       `Return ONLY the storyline text, no additional commentary.`
     );
   }
@@ -394,9 +393,10 @@ export class AI_Orchestrator {
       `You are a content editor. Split the following storyline into exactly ${slideCount} slide segments.\n\n` +
       `STORYLINE:\n${story}\n\n` +
       `Return a JSON array with exactly ${slideCount} objects. Each object must have:\n` +
-      `- "text": the slide caption text (concise, 1-3 sentences)\n` +
-      `- "emotion": the dominant emotion for this slide (e.g. "hopeful", "melancholic", "excited")\n` +
-      `- "scene": a brief visual scene description for image generation (e.g. "sunset over mountains")\n\n` +
+      `- "text": the slide caption text (concise, 1-3 sentences) — keep the same language as the storyline\n` +
+      `- "emotion": the dominant emotion for this slide in English (e.g. "hopeful", "melancholic", "excited")\n` +
+      `- "scene": a brief visual scene description for image generation IN ENGLISH (e.g. "sunset over mountains")\n\n` +
+      `IMPORTANT: "text" must be in the same language as the storyline. "emotion" and "scene" must always be in English.\n\n` +
       `Return ONLY valid JSON, no markdown code blocks, no commentary.\n` +
       `Example: [{"text":"...","emotion":"...","scene":"..."}]`
     );
@@ -407,7 +407,7 @@ export class AI_Orchestrator {
     theme: Theme,
     totalSlides: number,
   ): string {
-    const position = slide.index + 1; // 1-based for human-readable context
+    const position = slide.index + 1;
     const isFirst = slide.index === 0;
     const isLast = slide.index === totalSlides - 1;
 
@@ -431,9 +431,9 @@ export class AI_Orchestrator {
       (slide.scene ? `- Current scene: ${slide.scene}\n` : "") +
       `\nGenerate a fresh version of this slide. Return ONLY valid JSON with this exact shape:\n` +
       `{"text":"...","emotion":"...","scene":"..."}\n\n` +
-      `- "text": concise slide caption (1–3 sentences, evocative and on-brand)\n` +
-      `- "emotion": dominant emotion (e.g. "hopeful", "melancholic", "excited")\n` +
-      `- "scene": brief visual scene description for image generation (e.g. "golden hour forest path")\n\n` +
+      `- "text": concise slide caption (1–3 sentences, evocative and on-brand) — write in the SAME LANGUAGE as the current text\n` +
+      `- "emotion": dominant emotion in English (e.g. "hopeful", "melancholic", "excited")\n` +
+      `- "scene": brief visual scene description for image generation IN ENGLISH (e.g. "golden hour forest path")\n\n` +
       `Return ONLY valid JSON, no markdown, no commentary.`
     );
   }
@@ -482,6 +482,7 @@ export class AI_Orchestrator {
       `2. A brief narrative summary of the carousel\n` +
       `3. A clear call-to-action (CTA)\n` +
       `4. At least 10 relevant hashtags\n\n` +
+      `IMPORTANT: Write the caption in the SAME LANGUAGE as the carousel content above.\n` +
       `Write in an engaging, authentic tone suitable for Instagram. ` +
       `Return ONLY the caption text, ready to copy-paste.`
     );

@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS generations (
   project_id  UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   slide_id    UUID REFERENCES slides(id) ON DELETE SET NULL,
   type        TEXT NOT NULL CHECK (type IN ('story', 'image', 'caption', 'prompt')),
-  provider    TEXT NOT NULL CHECK (provider IN ('gemini', 'stability')),
+  provider    TEXT NOT NULL CHECK (provider IN ('gemini')),
   status      TEXT NOT NULL CHECK (status IN ('processing', 'success', 'failed')),
   error_msg   TEXT,
   metadata    JSONB,

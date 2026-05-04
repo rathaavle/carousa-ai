@@ -58,7 +58,7 @@ export interface Generation {
   project_id: string;
   slide_id: string | null;
   type: "story" | "image" | "caption" | "prompt";
-  provider: "gemini" | "stability";
+  provider: "gemini";
   status: "processing" | "success" | "failed";
   error_msg: string | null;
   metadata: Record<string, unknown> | null;

@@ -30,9 +30,9 @@ function errorResponse(
   return NextResponse.json({ error, code }, { status });
 }
 
-type RouteContext = { params: Promise<{ projectId: string }> };
+type RouteContext = { params: Promise<{ id: string }> };
 
-// ── GET /api/slides/[projectId] ──────────────────────────────
+// ── GET /api/slides/project/[id] ─────────────────────────────
 
 /**
  * Returns all slides for a project owned by the authenticated user,
@@ -49,7 +49,7 @@ export async function GET(
     return errorResponse("Tidak terautentikasi.", "UNAUTHORIZED", 401);
   }
 
-  const { projectId } = await context.params;
+  const { id: projectId } = await context.params;
 
   try {
     const supabase = await createClient();

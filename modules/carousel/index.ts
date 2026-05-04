@@ -22,6 +22,7 @@ import {
 import { AI_Orchestrator } from "@/modules/ai/orchestrator";
 import { uploadSlideImage } from "@/modules/image";
 import { AuthorizationError, AIGenerationError } from "@/lib/utils/errors";
+import { applyTextOverlay } from "@/lib/utils/image-text-overlay";
 import type { Slide, Theme } from "@/lib/db/types";
 
 // ── Public types ──────────────────────────────────────────────────────────
@@ -187,7 +188,7 @@ export class CarouselModule {
     let failed = 0;
     const updatedSlides: Slide[] = [];
 
-    // Process slides sequentially (Requirements 7.1)
+    // Process slides sequentially with a small delay to avoid rate limits
     for (const slide of slides) {
       try {
         // 1. Attach theme so generatePrompt() can access it
@@ -209,13 +210,22 @@ export class CarouselModule {
           slide.id,
         );
 
-        // 4. Upload to Supabase Storage (Requirements 7.2)
+        // 4. Apply text overlay onto the image
+        const imageWithText = slide.text
+          ? await applyTextOverlay(imageResult.imageBuffer, {
+              text: slide.text,
+              width: 1024,
+              height: 1024,
+            })
+          : imageResult.imageBuffer;
+
+        // 5. Upload to Supabase Storage (Requirements 7.2)
         const { publicUrl: imageUrl } = await uploadSlideImage(supabase, {
           userId,
           projectId,
           slideId: slide.id,
-          imageBuffer: imageResult.imageBuffer,
-          mimeType: imageResult.mimeType,
+          imageBuffer: imageWithText,
+          mimeType: "image/png",
         });
 
         // 5. Persist prompt + image_url back to the slide
@@ -243,6 +253,9 @@ export class CarouselModule {
         failed++;
         updatedSlides.push(slide); // keep original slide data
       }
+
+      // Delay 3 seconds between requests to avoid rate limiting
+      await new Promise((resolve) => setTimeout(resolve, 3000));
     }
 
     return { completed, failed, total: slides.length, slides: updatedSlides };
@@ -379,12 +392,20 @@ export class CarouselModule {
     }
 
     // 5. Upload to Supabase Storage (replaces the old file via upsert: true)
+    const imageWithText = slide.text
+      ? await applyTextOverlay(imageResult.imageBuffer, {
+          text: slide.text,
+          width: 1024,
+          height: 1024,
+        })
+      : imageResult.imageBuffer;
+
     const { publicUrl: imageUrl } = await uploadSlideImage(supabase, {
       userId,
       projectId,
       slideId: slide.id,
-      imageBuffer: imageResult.imageBuffer,
-      mimeType: imageResult.mimeType,
+      imageBuffer: imageWithText,
+      mimeType: "image/png",
     });
 
     // 6. Persist the new prompt + image_url (Requirements 8.3)

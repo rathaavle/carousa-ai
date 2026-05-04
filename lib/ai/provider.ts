@@ -49,7 +49,7 @@ export interface ImageResult {
 /**
  * Unified contract for all AI providers used by Carousa-AI.
  *
- * Each concrete provider (GeminiProvider, StabilityProvider) implements
+ * Each concrete provider (GeminiProvider) implements
  * this interface. Methods that are not supported by a provider must throw
  * an `UnsupportedOperationError` rather than silently failing.
  */

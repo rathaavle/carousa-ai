@@ -19,14 +19,10 @@ const mockGeminiGenerateText = vi.fn();
 vi.mock("@/lib/ai/gemini-provider", () => ({
   GeminiProvider: vi.fn().mockImplementation(() => ({
     generateText: (...args: unknown[]) => mockGeminiGenerateText(...args),
-    generateImage: vi.fn().mockRejectedValue(new Error("unsupported")),
-  })),
-}));
-
-vi.mock("@/lib/ai/stability-provider", () => ({
-  StabilityProvider: vi.fn().mockImplementation(() => ({
-    generateText: vi.fn().mockRejectedValue(new Error("unsupported")),
-    generateImage: vi.fn().mockRejectedValue(new Error("unsupported")),
+    generateImage: vi.fn().mockResolvedValue({
+      imageBuffer: Buffer.from("img"),
+      mimeType: "image/png",
+    }),
   })),
 }));
 

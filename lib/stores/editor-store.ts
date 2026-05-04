@@ -173,7 +173,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       // Fetch project and slides in parallel.
       const [projectRes, slidesRes] = await Promise.all([
         fetch(`/api/project/${projectId}`),
-        fetch(`/api/slides/${projectId}`),
+        fetch(`/api/slides/project/${projectId}`),
       ]);
 
       if (!projectRes.ok) {
@@ -190,8 +190,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         throw new Error(body.error ?? `HTTP ${slidesRes.status}`);
       }
 
-      const project = (await projectRes.json()) as Project;
-      const slides = (await slidesRes.json()) as Slide[];
+      const { project } = (await projectRes.json()) as { project: Project };
+      const { slides } = (await slidesRes.json()) as { slides: Slide[] };
 
       // Sort slides by index to guarantee display order.
       const sorted = [...slides].sort((a, b) => a.index - b.index);
@@ -247,12 +247,13 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     set({ slides: reordered });
 
     try {
+      const { project } = get();
       const updates = reordered.map((s) => ({ id: s.id, index: s.index }));
 
       const response = await fetch("/api/slides/reorder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ updates }),
+        body: JSON.stringify({ projectId: project?.id, slides: updates }),
       });
 
       if (!response.ok) {
